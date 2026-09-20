@@ -559,9 +559,8 @@
       else aqiText = 'Hazardous';
     }
 
-    // RainViewer embed — location from LOCATION, zoom capped at 7, cache-busted
     var rvSrc = 'https://www.rainviewer.com/map.html?loc=' +
-      LOCATION.lat.toFixed(4) + ',' + LOCATION.lon.toFixed(4) + ',7' +
+      LOCATION.lat.toFixed(4) + ',' + LOCATION.lon.toFixed(4) + ',9' +
       '&oC=true&oCS=1&oAP=1&c=9&o=83&lm=1&layer=radar&sm=1&sn=1&ts=2' +
       '&_v=' + encodeURIComponent(BUILD);
 
