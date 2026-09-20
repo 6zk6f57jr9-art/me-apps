@@ -538,9 +538,9 @@
     if (pTrend.dir === 'up') trendClass = 'trend-up';
     else if (pTrend.dir === 'down') trendClass = 'trend-down';
 
-    // Build RainViewer embed URL with current location and zoom 9
+    // Build RainViewer embed URL with current location and zoom 7
     var rvSrc = 'https://www.rainviewer.com/map.html?loc=' +
-      LOCATION.lat.toFixed(4) + ',' + LOCATION.lon.toFixed(4) + ',9' +
+      LOCATION.lat.toFixed(4) + ',' + LOCATION.lon.toFixed(4) + ',7' +
       '&oC=true&oCS=1&oAP=1&c=9&o=83&lm=1&layer=radar&sm=1&sn=1&ts=2';
 
     var html =
