@@ -89,12 +89,18 @@
 
   .day-row {
     display: grid;
-    grid-template-columns: 54px 30px 34px 1fr 34px;
-    align-items: center; gap: 8px;
+    grid-template-columns: 54px 34px 30px 34px 1fr 34px;
+    align-items: center; gap: 6px;
     padding: 10px 0; border-bottom: 1px solid var(--border);
   }
   .day-row:last-child { border-bottom: none; }
   .day-name { font-size: 15px; font-weight: 600; }
+  .day-pop {
+    font-size: 11px; font-weight: 600;
+    color: var(--accent);
+    text-align: right;
+    letter-spacing: -0.2px;
+  }
   .day-icon { width: 28px; height: 28px; }
   .day-low { font-size: 14px; font-weight: 600; color: var(--text-dim); text-align: right; }
   .day-high { font-size: 14px; font-weight: 600; color: var(--text); text-align: right; }
@@ -168,8 +174,6 @@
     color: var(--text-dim);
     letter-spacing: -0.1px;
   }
-  .detail-context.trend-up { color: #4ade80; }
-  .detail-context.trend-down { color: #f87171; }
 
   .loading {
     text-align: center; padding: 100px 20px;
@@ -209,12 +213,22 @@
 (function() {
   'use strict';
 
+  // Bump this to force cache refresh after updates
+  var BUILD = '20260920-1';
+
   var FALLBACK = { lat: 39.8137, lon: -105.2048, name: 'Arvada' };
   var LOCATION = { lat: FALLBACK.lat, lon: FALLBACK.lon, name: FALLBACK.name };
 
   var appEl = document.getElementById('app');
   var loadingEl = document.getElementById('loading');
   var contentEl = document.getElementById('content');
+
+  // Cache-busting fetch: always bypass HTTP cache for weather data
+  function noCacheFetch(url, opts) {
+    opts = opts || {};
+    opts.cache = 'no-store';
+    return fetch(url, opts);
+  }
 
   var I = {
     sun: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><line x1="12" y1="2" x2="12" y2="4"/><line x1="12" y1="20" x2="12" y2="22"/><line x1="2" y1="12" x2="4" y2="12"/><line x1="20" y1="12" x2="22" y2="12"/><line x1="4.9" y1="4.9" x2="6.3" y2="6.3"/><line x1="17.7" y1="17.7" x2="19.1" y2="19.1"/><line x1="4.9" y1="19.1" x2="6.3" y2="17.7"/><line x1="17.7" y1="6.3" x2="19.1" y2="4.9"/></svg>',
@@ -329,7 +343,7 @@
   }
 
   function getPlaceName(lat, lon) {
-    return fetch('https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=' +
+    return noCacheFetch('https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=' +
       lat.toFixed(4) + '&longitude=' + lon.toFixed(4) + '&localityLanguage=en')
       .then(function(r) { return r.ok ? r.json() : null; })
       .then(function(d) {
@@ -341,22 +355,22 @@
 
   function fetchNWS(lat, lon) {
     var headers = { 'Accept': 'application/geo+json' };
-    return fetch('https://api.weather.gov/points/' + lat.toFixed(4) + ',' + lon.toFixed(4), { headers: headers })
+    return noCacheFetch('https://api.weather.gov/points/' + lat.toFixed(4) + ',' + lon.toFixed(4), { headers: headers })
       .then(function(r) { if (!r.ok) throw new Error('NWS grid lookup failed'); return r.json(); })
       .then(function(points) {
         var gridUrl = points.properties.forecastGridData;
         return Promise.all([
-          fetch(points.properties.forecast, { headers: headers }).then(function(r){ return r.json(); }),
-          fetch(points.properties.forecastHourly, { headers: headers }).then(function(r){ return r.json(); }),
-          fetch(points.properties.observationStations, { headers: headers }).then(function(r){ return r.json(); }),
-          gridUrl ? fetch(gridUrl, { headers: headers }).then(function(r){ return r.ok ? r.json() : null; }).catch(function(){ return null; }) : Promise.resolve(null)
+          noCacheFetch(points.properties.forecast, { headers: headers }).then(function(r){ return r.json(); }),
+          noCacheFetch(points.properties.forecastHourly, { headers: headers }).then(function(r){ return r.json(); }),
+          noCacheFetch(points.properties.observationStations, { headers: headers }).then(function(r){ return r.json(); }),
+          gridUrl ? noCacheFetch(gridUrl, { headers: headers }).then(function(r){ return r.ok ? r.json() : null; }).catch(function(){ return null; }) : Promise.resolve(null)
         ]);
       })
       .then(function(res) {
         var forecast = res[0], hourly = res[1], stations = res[2], gridData = res[3];
         var ids = (stations.features || []).slice(0, 3).map(function(f){ return f.properties.stationIdentifier; });
         return Promise.all(ids.map(function(id) {
-          return fetch('https://api.weather.gov/stations/' + id + '/observations/latest', { headers: headers })
+          return noCacheFetch('https://api.weather.gov/stations/' + id + '/observations/latest', { headers: headers })
             .then(function(r){ return r.ok ? r.json() : null; })
             .catch(function(){ return null; });
         })).then(function(obsArr) {
@@ -373,7 +387,7 @@
   function fetchAQI(lat, lon) {
     var url = 'https://air-quality-api.open-meteo.com/v1/air-quality?latitude=' +
       lat.toFixed(4) + '&longitude=' + lon.toFixed(4) + '&current=us_aqi,pm2_5&timezone=auto';
-    return fetch(url)
+    return noCacheFetch(url)
       .then(function(r) { return r.ok ? r.json() : null; })
       .catch(function() { return null; });
   }
@@ -411,18 +425,26 @@
     var days = [];
     var i = 0;
     if (!periods[0].isDaytime) {
-      days.push({ name: 'Today', high: null, low: periods[0].temperature, forecast: periods[0].shortForecast, isDay: false });
+      var tPop0 = (periods[0].probabilityOfPrecipitation && periods[0].probabilityOfPrecipitation.value != null)
+        ? periods[0].probabilityOfPrecipitation.value : 0;
+      days.push({ name: 'Today', high: null, low: periods[0].temperature, forecast: periods[0].shortForecast, isDay: false, pop: tPop0 });
       i = 1;
     }
     while (i < periods.length && days.length < 10) {
       var dayP = periods[i], nightP = periods[i+1];
+      var dayPop = (dayP.probabilityOfPrecipitation && dayP.probabilityOfPrecipitation.value != null)
+        ? dayP.probabilityOfPrecipitation.value
+        : (nightP && nightP.probabilityOfPrecipitation && nightP.probabilityOfPrecipitation.value != null
+            ? nightP.probabilityOfPrecipitation.value
+            : 0);
       if (dayP.isDaytime) {
         days.push({
           name: days.length === 0 ? 'Today' : fmtDay(dayP.startTime.slice(0,10), days.length),
           high: dayP.temperature,
           low: (nightP && !nightP.isDaytime) ? nightP.temperature : null,
           forecast: dayP.shortForecast,
-          isDay: true
+          isDay: true,
+          pop: dayPop
         });
         i += 2;
       } else {
@@ -431,7 +453,8 @@
           high: null,
           low: dayP.temperature,
           forecast: dayP.shortForecast,
-          isDay: false
+          isDay: false,
+          pop: dayPop
         });
         i += 1;
       }
@@ -489,6 +512,7 @@
       var icon = pickIcon(d.forecast, d.isDay);
       var low = d.low != null ? Math.round(d.low) : null;
       var high = d.high != null ? Math.round(d.high) : null;
+      var popText = d.pop != null && d.pop > 0 ? d.pop + '%' : '';
 
       var leftCell, barCell, rightCell;
       if (low != null && high != null) {
@@ -513,6 +537,7 @@
 
       dailyHtml += '<div class="day-row">' +
         '<div class="day-name">' + d.name + '</div>' +
+        '<div class="day-pop">' + popText + '</div>' +
         '<div class="day-icon wx-icon">' + icon + '</div>' +
         leftCell + barCell + rightCell +
         '</div>';
@@ -534,14 +559,11 @@
       else aqiText = 'Hazardous';
     }
 
-    var trendClass = '';
-    if (pTrend.dir === 'up') trendClass = 'trend-up';
-    else if (pTrend.dir === 'down') trendClass = 'trend-down';
-
-    // Build RainViewer embed URL with current location and zoom 7
+    // RainViewer embed — location from LOCATION, zoom capped at 7, cache-busted
     var rvSrc = 'https://www.rainviewer.com/map.html?loc=' +
       LOCATION.lat.toFixed(4) + ',' + LOCATION.lon.toFixed(4) + ',7' +
-      '&oC=true&oCS=1&oAP=1&c=9&o=83&lm=1&layer=radar&sm=1&sn=1&ts=2';
+      '&oC=true&oCS=1&oAP=1&c=9&o=83&lm=1&layer=radar&sm=1&sn=1&ts=2' +
+      '&_v=' + encodeURIComponent(BUILD);
 
     var html =
       '<div class="current">' +
@@ -605,7 +627,7 @@
           '<div class="detail-label">Pressure</div>' +
           '<div class="detail-line">' +
             '<div class="detail-value">' + (pressure != null ? pressure + ' <small>hPa</small>' : '—') + '</div>' +
-            (pressure != null ? '<div class="detail-context ' + trendClass + '">' + pTrend.label + '</div>' : '') +
+            (pressure != null ? '<div class="detail-context">' + pTrend.label + '</div>' : '') +
           '</div>' +
         '</div>' +
         '<div class="detail-cell">' +
@@ -621,7 +643,9 @@
             (aqiText ? '<div class="detail-context">' + aqiText + '</div>' : '') +
           '</div>' +
         '</div>' +
-      '</div>' + '<br>';
+      '</div>' +
+
+      '<div class="attribution">Weather: <a href="https://www.weather.gov">NWS</a> · Radar: <a href="https://www.rainviewer.com">RainViewer</a> · AQI: <a href="https://open-meteo.com">Open-Meteo</a></div>';
 
     contentEl.innerHTML = html;
     loadingEl.style.display = 'none';
