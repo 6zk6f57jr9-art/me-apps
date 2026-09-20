@@ -8,7 +8,6 @@
 <meta name="apple-mobile-web-app-title" content="Weather">
 <meta name="theme-color" content="#12121e">
 <title>Weather</title>
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <style>
   :root {
     --bg: #12121e;
@@ -109,26 +108,23 @@
     background: linear-gradient(90deg, #667eea, #a0a0c0);
   }
 
-  #radar-map { height: 220px; width: 100%; background: #0a0a14; position: relative; }
-  .radar-bar { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
-  .radar-play {
-    width: 32px; height: 32px; border-radius: 50%;
-    background: var(--accent); border: none; color: white;
-    font-size: 12px; cursor: pointer; flex-shrink: 0;
-    display: flex; align-items: center; justify-content: center;
+  /* RainViewer iframe embed */
+  .rv-wrap {
+    position: relative;
+    width: 100%;
+    height: 340px;
+    border-radius: 10px;
+    overflow: hidden;
+    background: #0a0a14;
   }
-  .radar-play:disabled { opacity: 0.35; }
-  .radar-slider {
-    flex: 1; -webkit-appearance: none; height: 3px;
-    border-radius: 2px; background: rgba(102,126,234,0.25); outline: none;
-  }
-  .radar-slider::-webkit-slider-thumb {
-    -webkit-appearance: none; width: 14px; height: 14px;
-    border-radius: 50%; background: var(--accent); cursor: pointer;
-  }
-  .radar-time {
-    font-size: 11px; color: var(--text-dim); min-width: 54px;
-    text-align: right; font-variant-numeric: tabular-nums; font-weight: 600;
+  .rv-wrap iframe {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    border: 0;
+    display: block;
   }
   .radar-legend {
     display: flex; align-items: center; gap: 6px;
@@ -139,13 +135,6 @@
     flex: 1; height: 4px; border-radius: 2px;
     background: linear-gradient(90deg, #00ff00, #ffff00, #ff8800, #ff0000, #cc00cc);
   }
-  .radar-status {
-    position: absolute; top: 8px; left: 8px; z-index: 500;
-    background: rgba(0,0,0,0.75); color: white; padding: 4px 10px;
-    border-radius: 10px; font-size: 10px; font-weight: 600;
-    display: none;
-  }
-  .radar-status.show { display: block; }
 
   .details {
     display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px;
@@ -216,13 +205,11 @@
   <div id="content" style="display:none;"></div>
 </div>
 
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
 (function() {
   'use strict';
 
-  // Fallback location if geolocation is denied or unavailable
-  var FALLBACK = { lat: 39.860686, lon: -105.158162, name: 'Arvada' };
+  var FALLBACK = { lat: 39.8137, lon: -105.2048, name: 'Arvada' };
   var LOCATION = { lat: FALLBACK.lat, lon: FALLBACK.lon, name: FALLBACK.name };
 
   var appEl = document.getElementById('app');
@@ -328,7 +315,6 @@
     return { dir: 'steady', label: '→ steady' };
   }
 
-  // ---------- Geolocation ----------
   function getLocation() {
     return new Promise(function(resolve) {
       if (!navigator.geolocation) { resolve(null); return; }
@@ -342,7 +328,6 @@
     });
   }
 
-  // Reverse geocode to a friendly name via BigDataCloud (free, no key)
   function getPlaceName(lat, lon) {
     return fetch('https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=' +
       lat.toFixed(4) + '&longitude=' + lon.toFixed(4) + '&localityLanguage=en')
@@ -553,6 +538,11 @@
     if (pTrend.dir === 'up') trendClass = 'trend-up';
     else if (pTrend.dir === 'down') trendClass = 'trend-down';
 
+    // Build RainViewer embed URL with current location and zoom 9
+    var rvSrc = 'https://www.rainviewer.com/map.html?loc=' +
+      LOCATION.lat.toFixed(4) + ',' + LOCATION.lon.toFixed(4) + ',9' +
+      '&oC=true&oCS=1&oAP=1&c=9&o=83&lm=1&layer=radar&sm=1&sn=1&ts=2';
+
     var html =
       '<div class="current">' +
         '<span class="icon wx-icon">' + pickIcon(condition, isDay) + '</span>' +
@@ -573,11 +563,8 @@
 
       '<div class="section">' +
         '<div class="section-label">Radar</div>' +
-        '<div id="radar-map"><div class="radar-status" id="radar-status">Loading…</div></div>' +
-        '<div class="radar-bar">' +
-          '<button class="radar-play" id="radar-play" disabled>▶</button>' +
-          '<input type="range" class="radar-slider" id="radar-slider" min="0" max="0" value="0" disabled>' +
-          '<div class="radar-time" id="radar-time">--:--</div>' +
+        '<div class="rv-wrap">' +
+          '<iframe src="' + rvSrc + '" width="100%" height="100%" frameborder="0" style="border:0;" allowfullscreen loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>' +
         '</div>' +
         '<div class="radar-legend"><span>Light</span><div class="radar-legend-bar"></div><span>Heavy</span></div>' +
       '</div>' +
@@ -634,148 +621,21 @@
             (aqiText ? '<div class="detail-context">' + aqiText + '</div>' : '') +
           '</div>' +
         '</div>' +
-      '</div>' +
-
-      '<div class="attribution">Weather: <a href="https://www.weather.gov">NWS</a> · Radar: <a href="https://www.rainviewer.com">RainViewer</a> · AQI: <a href="https://open-meteo.com">Open-Meteo</a> · © OpenStreetMap</div>';
+      '</div>' + '<br>';
 
     contentEl.innerHTML = html;
     loadingEl.style.display = 'none';
     contentEl.style.display = 'block';
-
-    initRadar(LOCATION.lat, LOCATION.lon);
   }
 
-  function initRadar(lat, lon) {
-    var map = L.map('radar-map', {
-      center: [lat, lon], zoom: 9, zoomControl: false,
-      attributionControl: false, preferCanvas: true, fadeAnimation: false
-    });
-
-    var baseLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 19, subdomains: 'abc'
-    }).addTo(map);
-    baseLayer.getContainer().style.filter = 'invert(1) hue-rotate(180deg) brightness(0.85) contrast(0.9) saturate(0.6)';
-
-    L.circleMarker([lat, lon], {
-      radius: 5, color: '#667eea', fillColor: '#667eea', fillOpacity: 1, weight: 2
-    }).addTo(map);
-
-    setTimeout(function() { map.invalidateSize(); }, 100);
-
-    fetch('https://api.rainviewer.com/public/weather-maps.json')
-      .then(function(r) { return r.json(); })
-      .then(function(data) {
-        var host = data.host;
-        var frames = data.radar.past.concat(data.radar.nowcast || []);
-        if (!frames.length) throw new Error('no frames');
-
-        var layers = frames.map(function(f, i) {
-          return {
-            layer: L.tileLayer(host + f.path + '/256/{z}/{x}/{y}/4/1_1.png', {
-              maxZoom: 19, opacity: 0, zIndex: 300 + i
-            }),
-            time: f.time
-          };
-        });
-
-        var statusEl = document.getElementById('radar-status');
-        statusEl.classList.add('show');
-        statusEl.textContent = 'Preloading…';
-
-        function preload(layer) {
-          return new Promise(function(resolve) {
-            var bounds = map.getPixelBounds();
-            var z = map.getZoom();
-            var minX = Math.floor(bounds.min.x / 256) - 1;
-            var maxX = Math.floor(bounds.max.x / 256) + 1;
-            var minY = Math.floor(bounds.min.y / 256) - 1;
-            var maxY = Math.floor(bounds.max.y / 256) + 1;
-            var seen = {};
-            for (var x = minX; x <= maxX; x++) {
-              for (var y = minY; y <= maxY; y++) {
-                seen[layer._url.replace('{z}', z).replace('{x}', x).replace('{y}', y)] = 1;
-              }
-            }
-            var keys = Object.keys(seen);
-            if (!keys.length) { resolve(); return; }
-            var remaining = keys.length;
-            keys.forEach(function(url) {
-              var img = new Image();
-              img.onload = img.onerror = function() {
-                remaining--;
-                if (remaining === 0) resolve();
-              };
-              img.src = url;
-            });
-          });
-        }
-
-        Promise.all(layers.map(function(l){ return preload(l.layer); })).then(function() {
-          statusEl.classList.remove('show');
-          var slider = document.getElementById('radar-slider');
-          var playBtn = document.getElementById('radar-play');
-          var timeEl = document.getElementById('radar-time');
-          slider.disabled = false;
-          playBtn.disabled = false;
-          slider.max = layers.length - 1;
-          slider.value = layers.length - 1;
-
-          var idx = layers.length - 1;
-          var animating = false, timer = null;
-
-          layers.forEach(function(l){ if (!map.hasLayer(l.layer)) l.layer.addTo(map); });
-
-          function show(i) {
-            layers.forEach(function(l, j){ l.layer.setOpacity(j === i ? 0.75 : 0); });
-            slider.value = i;
-            var d = new Date(layers[i].time * 1000);
-            var h = d.getHours();
-            var ampm = h >= 12 ? 'PM' : 'AM';
-            h = h % 12 || 12;
-            timeEl.textContent = h + ':' + String(d.getMinutes()).padStart(2, '0') + ampm;
-          }
-          show(idx);
-
-          slider.addEventListener('input', function(e) {
-            idx = parseInt(e.target.value, 10);
-            show(idx);
-          });
-
-          playBtn.addEventListener('click', function() {
-            if (animating) {
-              animating = false;
-              playBtn.textContent = '▶';
-              clearInterval(timer);
-            } else {
-              animating = true;
-              playBtn.textContent = '❚❚';
-              timer = setInterval(function() {
-                idx = (idx + 1) % layers.length;
-                show(idx);
-              }, 900);
-            }
-          });
-        }).catch(function() {
-          statusEl.textContent = 'Radar unavailable';
-        });
-      })
-      .catch(function() {
-        var el = document.getElementById('radar-status');
-        if (el) { el.classList.add('show'); el.textContent = 'Radar unavailable'; }
-      });
-  }
-
-  // ---------- Main: geolocate, then load everything ----------
   getLocation().then(function(coords) {
     if (coords) {
       LOCATION.lat = coords.lat;
       LOCATION.lon = coords.lon;
-      // Try to reverse geocode a friendly name; ignore errors
       return getPlaceName(coords.lat, coords.lon).then(function(name) {
         if (name) LOCATION.name = name;
       });
     }
-    // If no coords, keep fallback
   }).then(function() {
     return Promise.all([
       fetchNWS(LOCATION.lat, LOCATION.lon),
